@@ -1,11 +1,13 @@
 package env
 
 import (
+	"encoding/binary"
 	"os"
 	"reflect"
 	"runtime"
 	"strconv"
 	"strings"
+	"unsafe"
 )
 
 /* ========================================================================= //
@@ -15,27 +17,27 @@ import (
 		Then MAIN
 
 	So, we use variable declaration to make sure the env is read in before
-	other packages 'init' functions which could use the env package.
+	other package 'init' functions, which could use this env package.
 
 	ReadEnvVars will handle strings, ints & []strings -- see envSep below
 
 	An outside package can call ReadEnvVars to retrieve any environment vars
 	specific for it:
 
-	var myEnvVars struct {
-		Foo string // names must be capitalized for this package to read them
-		Bar int
-	}
+		var myEnvVars struct {
+			Foo    string // names must be capitalized for this package to read them
+			Bar    int
+			foobar data{} // non-cap names are private and aren't touched
+		}
 
-	func init() {
-		env.ReadEnvVars(&myEnvVars)
-	}
+		func init() {
+			env.ReadEnvVars(&myEnvVars)
+		}
 // ------------------------------------------------------------------------- */
 
-const envSep = ":" // what to split any string slices with
-
 var (
-	envSet = getEnv() // doing this gets the environment vars before any init() function(s) are called
+	envSep = getEnv() // doing this gets the environment vars before any init() function(s) are called
+	//                   also gives what to split any string slices with, ':' for linux, ';' for windows
 
 	env struct {
 		Host string // host name (read on linux, assigned on wondows)
@@ -63,6 +65,33 @@ func IsWindows() bool {
 	return env.Host == "windows"
 }
 
+// return if system is little endian
+func ImLittleEndian() bool {
+	et := 1
+	return *(*byte)(unsafe.Pointer(&et)) == 1
+}
+
+// return if system is little endian
+func ImBigEndian() bool {
+	return !ImLittleEndian()
+}
+
+// return proper system encoding
+func MyEncoding() binary.ByteOrder {
+	if ImLittleEndian() {
+		return binary.LittleEndian
+	}
+	return binary.BigEndian
+}
+
+// return non native encoding
+func NotMyEncoding() binary.ByteOrder {
+	if ImBigEndian() {
+		return binary.LittleEndian
+	}
+	return binary.BigEndian
+}
+
 // read the env vars and try matching them into any structure passed
 func ReadEnvVars(i interface{}) {
 	v := reflect.ValueOf(i).Elem()
@@ -75,7 +104,8 @@ func ReadEnvVars(i interface{}) {
 }
 
 // getEnv -- run as variable assignment to be assured it is run before all 'init' methods; some which may call into here
-func getEnv() bool {
+func getEnv() string {
+	sep := ":"
 	ReadEnvVars(&env)
 
 	// validate we have some values
@@ -86,8 +116,11 @@ func getEnv() bool {
 		// try Windows 'USERNAME'
 		getEnvVal("USERNAME", reflect.ValueOf(&env).Elem().FieldByName("User"))
 	}
+	if env.IsWindows() {
+		sep = ";"
+	}
 
-	return true
+	return sep
 }
 
 // read in env vars for element
