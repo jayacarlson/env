@@ -35,9 +35,10 @@ import (
 		}
 // ------------------------------------------------------------------------- */
 
+const envSep = ":" // what to split any string slices with, ':' for linux, ';' for windows
+
 var (
-	envSep = getEnv() // doing this gets the environment vars before any init() function(s) are called
-	//                   also gives what to split any string slices with, ':' for linux, ';' for windows
+	envSet = getEnv() // doing this gets the environment vars before any init() function(s) are called
 
 	env struct {
 		Host string // host name (read on linux, assigned on wondows)
@@ -104,8 +105,7 @@ func ReadEnvVars(i interface{}) {
 }
 
 // getEnv -- run as variable assignment to be assured it is run before all 'init' methods; some which may call into here
-func getEnv() string {
-	sep := ":"
+func getEnv() bool {
 	ReadEnvVars(&env)
 
 	// validate we have some values
@@ -116,11 +116,8 @@ func getEnv() string {
 		// try Windows 'USERNAME'
 		getEnvVal("USERNAME", reflect.ValueOf(&env).Elem().FieldByName("User"))
 	}
-	if env.IsWindows() {
-		sep = ";"
-	}
 
-	return sep
+	return true
 }
 
 // read in env vars for element
